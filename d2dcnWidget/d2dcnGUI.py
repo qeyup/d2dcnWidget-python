@@ -25,15 +25,104 @@ def main():
 
 
     parser = argparse.ArgumentParser(description="d2dcn GUI")
+    parser.add_argument(
+        '--device-hlayout',
+        required=False,
+        default="",
+        action="store_true",
+        help='Device horizontal layout')
+    parser.add_argument(
+        '--category-hlayout',
+        required=False,
+        default="",
+        action="store_true",
+        help='Category object horizontal layout')
+    parser.add_argument(
+        '--object-hlayout',
+        required=False,
+        default="",
+        action="store_true",
+        help='Object object horizontal layout')
+
+
+    parser.add_argument(
+        '--ignore-command',
+        required=False,
+        default="",
+        action="store_true",
+        help='Ignore commands')
+    parser.add_argument(
+        '--command-mac-pattern',
+        metavar = "[COMMAND_MAC_PATTERN]",
+        required=False,
+        default="",
+        help='Regular expresion for command mac pattern')
+    parser.add_argument(
+        '--command-service-pattern',
+        metavar = "[COMMAND_SERVICE_PATTERN]",
+        required=False,
+        default="",
+        help='Regular expresion for command service pattern')
+    parser.add_argument(
+        '--command-category-pattern',
+        metavar = "[COMMAND_CATEGORY_PATTERN]",
+        required=False,
+        default="",
+        help='Regular expresion for command category pattern')
+    parser.add_argument(
+        '--command-name-pattern',
+        metavar = "[COMMAND_NAME_PATTERN]",
+        required=False,
+        default="",
+        help='Regular expresion for command name pattern')
+
+    parser.add_argument(
+        '--ignore-info',
+        required=False,
+        default="",
+        action="store_true",
+        help='Ignore info')
+    parser.add_argument(
+        '--info-mac-pattern',
+        metavar = "[INFO_MAC_PATTERN]",
+        required=False,
+        default="",
+        help='Regular expresion for command mac pattern')
+    parser.add_argument(
+        '--info-service-pattern',
+        metavar = "[INFO_SERVICE_PATTERN]",
+        required=False,
+        default="",
+        help='Regular expresion for command service pattern')
+    parser.add_argument(
+        '--info-category-pattern',
+        metavar = "[INFO_CATEGORY_PATTERN]",
+        required=False,
+        default="",
+        help='Regular expresion for command category pattern')
+    parser.add_argument(
+        '--info-name-pattern',
+        metavar = "[INFO_NAME_PATTERN]",
+        required=False,
+        default="",
+        help='Regular expresion for command name pattern')
     args = parser.parse_args(sys.argv[1:])
+
 
     try:
         app = QApplication(sys.argv)
 
-        window = d2dcnWidget.d2dcnWidget()
+        window = d2dcnWidget.d2dcnWidget(args.device_hlayout, args.category_hlayout, args.object_hlayout)
+        if not args.ignore_command:
+            window.subscribeComands(args.command_mac_pattern, args.command_service_pattern, args.command_category_pattern, args.command_name_pattern)
+
+        if not args.ignore_info:
+            window.subscribeInfo(args.info_mac_pattern, args.info_service_pattern, args.info_category_pattern, args.info_name_pattern)
+
         window.show()
 
         app.exec()
+        del window
 
     except KeyboardInterrupt:
         pass
