@@ -15,16 +15,16 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSizePolicy, QPushButton, QTabWidget, QFrame, QCheckBox, QDoubleSpinBox, QSpinBox, QLineEdit, QScrollArea
-from PyQt5.QtCore import Qt, QByteArray, QBuffer, QEvent, QCoreApplication, QEventLoop, pyqtSignal
-from PyQt5.QtGui import QColor, QPalette, QPixmap, QGuiApplication, QImage, QImageReader
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSizePolicy, QPushButton, QTabWidget, QFrame, QCheckBox, QDoubleSpinBox, QSpinBox, QLineEdit, QScrollArea
+from PyQt5.QtCore import Qt, QEvent, QCoreApplication, QEventLoop, pyqtSignal, QTimer
+from PyQt5.QtGui import QFontMetrics
 
 import weakref
 
 import d2dcn
 
 
-version = "0.1.0"
+version = "0.1.1"
 
 class QHLine(QFrame):
     def __init__(self):
@@ -50,6 +50,8 @@ class d2dcnWidget(QWidget):
         self.__d2dcn_client = d2dcn.d2d()
         self.__d2dcn_client.onCommandUpdate = lambda command, weak_widget=weakref.ref(self) : d2dcnWidget.__on_command_update(command, weak_widget)
         self.__d2dcn_client.onInfoUpdate = lambda info, weak_widget=weakref.ref(self) : d2dcnWidget.__on_info_update(info, weak_widget)
+        self.__d2dcn_client.onCommandRemove = lambda command, weak_widget=weakref.ref(self) : d2dcnWidget.__on_command_remove(command, weak_widget)
+        self.__d2dcn_client.onInfoRemove = lambda info, weak_widget=weakref.ref(self) : d2dcnWidget.__on_info_remove(info, weak_widget)
 
         self.resize(500,500)
 
@@ -90,6 +92,18 @@ class d2dcnWidget(QWidget):
             QCoreApplication.postEvent(d2dcn_widget.__service_view, serviceView.addServiceCommandEvent(command))
 
 
+    def __on_info_remove(info, d2dcn_widget_weak):
+        d2dcn_widget = d2dcn_widget_weak()
+        if d2dcn_widget:
+            QCoreApplication.postEvent(d2dcn_widget.__service_view, serviceView.removeServiceInfoEvent(info))
+
+
+    def __on_command_remove(command, d2dcn_widget_weak):
+        d2dcn_widget = d2dcn_widget_weak()
+        if d2dcn_widget:
+            QCoreApplication.postEvent(d2dcn_widget.__service_view, serviceView.removeServiceCommandEvent(command))
+
+
     def subscribeComands(self, mac:str="", service:str="", category:str="", command:str="") -> bool:
         return self.__d2dcn_client.subscribeComands(mac, service, category, command)
 
@@ -110,7 +124,17 @@ class serviceView(QWidget):
             super().__init__(QEvent.User)
             self.command = command
 
+    class removeServiceCommandEvent(QEvent):
+        def __init__(self, command):
+            super().__init__(QEvent.User)
+            self.command = command
+
     class addServiceInfoEvent(QEvent):
+        def __init__(self, info):
+            super().__init__(QEvent.User)
+            self.info = info
+
+    class removeServiceInfoEvent(QEvent):
         def __init__(self, info):
             super().__init__(QEvent.User)
             self.info = info
@@ -140,6 +164,12 @@ class serviceView(QWidget):
 
         elif isinstance(event, serviceView.addServiceInfoEvent):
             self.addServiceInfo(event.info)
+
+        elif isinstance(event, serviceView.removeServiceCommandEvent):
+            self.removeServiceCommand(event.command)
+
+        elif isinstance(event, serviceView.removeServiceInfoEvent):
+            self.removeServiceInfo(event.info)
 
         else:
             return super().event(event)
@@ -176,6 +206,15 @@ class serviceView(QWidget):
         widget.addInfo(info_obj)
 
 
+    def removeServiceInfo(self, info_obj):
+        uid = self.generateServiceUID(info_obj.mac, info_obj.service)
+        if uid not in self.__service_widget_map:
+            return
+
+        widget = self.__service_widget_map[uid]
+        widget.removeInfo(info_obj)
+
+
     def addServiceCommand(self, command_obj):
         uid = self.generateServiceUID(command_obj.mac, command_obj.service)
         if uid not in self.__service_widget_map:
@@ -183,6 +222,15 @@ class serviceView(QWidget):
 
         widget = self.__service_widget_map[uid]
         widget.addCommand(command_obj)
+
+
+    def removeServiceCommand(self, command_obj):
+        uid = self.generateServiceUID(command_obj.mac, command_obj.service)
+        if uid not in self.__service_widget_map:
+            return
+
+        widget = self.__service_widget_map[uid]
+        widget.removeCommand(command_obj)
 
 
 class service(QTabWidget):
@@ -276,6 +324,12 @@ class service(QTabWidget):
         if len(self.__info_widget_map) > 0 and len(self.__command_widget_map) > 0:
             self.__dif_line.show()
 
+
+    def removeInfo(self, info_obj):
+        if info_obj.name in self.__info_widget_map:
+            self.__info_widget_map.pop(info_obj.name).deleteLater()
+
+
     def addCommand(self, command_obj):
 
         if command_obj.name not in self.__command_widget_map:
@@ -316,8 +370,14 @@ class service(QTabWidget):
         if len(self.__info_widget_map) > 0 and len(self.__command_widget_map) > 0:
             self.__dif_line.show()
 
+
+    def removeCommand(self, command_obj):
+        if command_obj.name in self.__command_widget_map:
+            self.__command_widget_map.pop(command_obj.name).deleteLater()
+
+
 class fieldOutput(QWidget):
-    def __init__(self, name, valueType, value):
+    def __init__(self, name, valueType, value, scroll_time=250):
         super().__init__()
 
         self.__main_layout = QHBoxLayout()
@@ -334,6 +394,40 @@ class fieldOutput(QWidget):
         self.__main_layout.addWidget(tag_label)
         self.__main_layout.addWidget(self.__value_label)
         self.update(value)
+
+        if scroll_time > 0:
+            self.__update_timer = QTimer()
+            self.__update_timer.timeout.connect(self.scrollTextStep)
+            self.__update_timer.start(scroll_time)
+
+
+    def scrollTextStep(self):
+        if self.__value_label.hasSelectedText():
+            return
+
+        cursor_pos = self.__value_label.cursorPosition()
+        if cursor_pos == len(self.__value_label.text()):
+            cursor_pos = 0
+
+        elif cursor_pos == 0:
+            font_metric = QFontMetrics(self.__value_label.font())
+            pix_pos = 0
+            for c in self.__value_label.text():
+                char_pix = font_metric.horizontalAdvance(c)
+                pix_pos += char_pix
+                cursor_pos += 1
+                if pix_pos >= self.__value_label.width() - (5 * char_pix):
+                    break
+
+        else:
+            cursor_pos += 1
+
+        self.__value_label.setCursorPosition(cursor_pos)
+
+
+    def resizeEvent(self, event):
+        self.__value_label.setCursorPosition(0)
+        super().resizeEvent(event)
 
 
     def update(self, value):
@@ -535,6 +629,8 @@ class commandExecution(QWidget):
         super().__init__()
         self.setWindowModality(Qt.ApplicationModal)
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
+        #self.resize(self.sizeHint())
+
 
         self.__command_obj = command_obj
 
@@ -565,6 +661,14 @@ class commandExecution(QWidget):
             command_response = commmandResponse(self.__command_obj.response, response)
             command_response.exit_buttom.clicked.connect(self.hide)
             self.__main_layout.addWidget(command_response)
+
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        for i in range(self.__main_layout.count()):
+            item = self.__main_layout.takeAt(i)
+            if item and item.widget():
+                item.widget().deleteLater()
 
 
 class commandArgs(QWidget):

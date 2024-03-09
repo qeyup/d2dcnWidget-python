@@ -10,6 +10,11 @@ if __name__ == '__main__':
         name = 'd2dcnWidget',
         version = d2dcnWidget.version,
         packages = ["d2dcnWidget"],
+        entry_points={
+            'console_scripts': [
+                'd2dcnGUI=d2dcnWidget.d2dcnGUI:main'
+            ],
+        },
         install_requires = [
             "d2dcn",
             "PyQt5"
@@ -19,5 +24,5 @@ if __name__ == '__main__':
         description = "",
         long_description_content_type = "text/markdown",
         long_description = "",
-        url = "https://github.com/qeyup/d2dcnWidget"
+        url = "https://github.com/qeyup/d2dcnWidget-python"
     )

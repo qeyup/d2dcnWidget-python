@@ -23,6 +23,7 @@ import sys
 import subprocess
 import threading
 import datetime
+import argparse
 
 import d2dcnWidget
 
@@ -60,13 +61,12 @@ class mqttBroker(unittest.TestCase):
 class Test_d2dcnWidget(unittest.TestCase):
 
     def setUp(self):
-        self.mqtt_broker = mqttBroker()
         self.app = PyQt5.QtWidgets.QApplication(sys.argv)
 
 
-    def createSimulatedDevice1(self, command_prefix, info_prefix, info_category="test"):
+    def createSimulatedDevice(self, service, command_prefix, info_prefix, info_category="test"):
 
-        simulated_device = d2dcn.d2d()
+        simulated_device = d2dcn.d2d(service=service)
         api_result = {}
         api_result["arg1"] = {}
         api_result["arg1"]["type"] = "int"
@@ -124,7 +124,7 @@ class Test_d2dcnWidget(unittest.TestCase):
                 del sharer_ptr
                 time.sleep(0.25)
 
-        thread  = threading.Thread(target=updateTread, daemon=False, args=[weakref.ref(simulated_device), info_prefix, info_category])
+        thread  = threading.Thread(target=updateTread, daemon=True, args=[weakref.ref(simulated_device), info_prefix, info_category])
         thread .start()
 
 
@@ -146,10 +146,10 @@ class Test_d2dcnWidget(unittest.TestCase):
 
     def test2_DetectNewDevices(self):
 
-        simulated_deviceA = self.createSimulatedDevice1("TestsCommand_A", "TestInfo_A")
-        simulated_deviceB = self.createSimulatedDevice1("TestsCommand_B", "TestInfo_B")
-        simulated_deviceC = self.createSimulatedDevice1("TestsCommand_C", "TestInfo_C")
-        simulated_deviceD = self.createSimulatedDevice1("TestsCommand_D", "TestInfo_D")
+        simulated_deviceA = self.createSimulatedDevice("simulatedService1", "TestsCommand_A", "TestInfo_A")
+        simulated_deviceB = self.createSimulatedDevice("simulatedService2", "TestsCommand_B", "TestInfo_B")
+        simulated_deviceC = self.createSimulatedDevice("simulatedService3", "TestsCommand_C", "TestInfo_C")
+        simulated_deviceD = self.createSimulatedDevice("simulatedService4", "TestsCommand_D", "TestInfo_D")
 
         test = d2dcnWidget.d2dcnWidget()
         self.assertTrue(test.subscribeComands())
@@ -160,4 +160,20 @@ class Test_d2dcnWidget(unittest.TestCase):
 
 
 if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--not-instance-broker',
+        required=False,
+        action="store_false",
+        help='Not instance test broker')
+    parser.add_argument('filename')
+    parser.add_argument('unittest_args', nargs='*')
+
+    args = parser.parse_args()
+    sys.argv[1:] = args.unittest_args
+
+    if args.not_instance_broker:
+        mqtt_broker = mqttBroker()
+
     unittest.main()

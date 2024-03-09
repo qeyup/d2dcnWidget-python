@@ -21,8 +21,8 @@ import d2dcnWidget
 import argparse
 import sys
 
-def main():
 
+def main():
 
     parser = argparse.ArgumentParser(description="d2dcn GUI")
     parser.add_argument(
@@ -43,7 +43,6 @@ def main():
         default="",
         action="store_true",
         help='Object object horizontal layout')
-
 
     parser.add_argument(
         '--ignore-command',
