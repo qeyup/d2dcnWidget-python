@@ -24,7 +24,7 @@ import weakref
 import d2dcn
 
 
-version = "0.1.1"
+version = "0.1.2"
 
 class QHLine(QFrame):
     def __init__(self):
@@ -652,9 +652,8 @@ class commandExecution(QWidget):
 
         else:
             args = {}
-
         response = self.__command_obj.call(args)
-        if isinstance(response, dict) and len(response) == 0:
+        if not response.error and len(response) == 0:
             self.hide()
         else:
             self.show()
@@ -723,8 +722,8 @@ class commmandResponse(QWidget):
         label = QLabel()
         label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        if not isinstance(response_map, dict):
-            label.setText(response_map)
+        if response_map.error:
+            label.setText(response_map.error)
             self.__main_layout.addWidget(label)
 
         else:
