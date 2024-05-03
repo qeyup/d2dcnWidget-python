@@ -24,7 +24,7 @@ import weakref
 import d2dcn
 
 
-version = "0.1.2"
+version = "0.1.3"
 
 class QHLine(QFrame):
     def __init__(self):
@@ -270,7 +270,7 @@ class service(QTabWidget):
         self.__dif_line.hide()
 
         self.__command_widget = QWidget()
-        self.__command_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.__command_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self.__command_widget.hide()
 
         if object_hlayout:
