@@ -12,6 +12,14 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": "${input:inPrompt}"
+        },
+        {
+            "name": "d2dcnGUI",
+            "type": "python",
+            "request": "launch",
+            "program": "d2dcnWidget/d2dcnGUI.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
         }
     ],
     "inputs": [

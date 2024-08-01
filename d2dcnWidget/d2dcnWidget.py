@@ -16,15 +16,15 @@
 #
 
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSizePolicy, QPushButton, QTabWidget, QFrame, QCheckBox, QDoubleSpinBox, QSpinBox, QLineEdit, QScrollArea
-from PyQt5.QtCore import Qt, QEvent, QCoreApplication, QEventLoop, pyqtSignal, QTimer
-from PyQt5.QtGui import QFontMetrics
+from PyQt5.QtCore import Qt, QEvent, QCoreApplication, QEventLoop, pyqtSignal, QTimer, QRegularExpression
+from PyQt5.QtGui import QFontMetrics, QRegularExpressionValidator
 
 import weakref
 
 import d2dcn
 
 
-version = "0.1.3"
+version = "0.1.4"
 
 class QHLine(QFrame):
     def __init__(self):
@@ -444,6 +444,27 @@ class fieldOutput(QWidget):
         elif self.__valueType == d2dcn.d2dConstants.valueTypes.STRING:
             self.__value_label.setText(value)
 
+        elif self.__valueType == d2dcn.d2dConstants.valueTypes.BOOL_ARRAY:
+            value_txt = []
+            for item in value:
+                value_txt.append(str("1" if item else "0"))
+            self.__value_label.setText(fieldInput.INPUT_NUM_SEPATAROR.join(value_txt))
+
+        elif self.__valueType == d2dcn.d2dConstants.valueTypes.INT_ARRAY:
+            value_txt = []
+            for item in value:
+                value_txt.append(str(item))
+            self.__value_label.setText(fieldInput.INPUT_NUM_SEPATAROR.join(value_txt))
+    
+        elif self.__valueType == d2dcn.d2dConstants.valueTypes.STRING_ARRAY:
+            self.__value_label.setText(fieldInput.INPUT_STR_SEPATAROR.join(value))
+
+        elif self.__valueType == d2dcn.d2dConstants.valueTypes.FLOAT_ARRAY:
+            value_txt = []
+            for item in value:
+                value_txt.append(str(item))
+            self.__value_label.setText(fieldInput.INPUT_NUM_SEPATAROR.join(value_txt))
+
         else:
             self.__value_label.setText("unknown type")
 
@@ -456,6 +477,9 @@ class fieldOutput(QWidget):
 
 
 class fieldInput(QWidget):
+
+    INPUT_NUM_SEPATAROR = " "
+    INPUT_STR_SEPATAROR = ";"
 
     class CLineEdit(QLineEdit):
 
@@ -552,6 +576,21 @@ class fieldInput(QWidget):
         elif self.__valueType == d2dcn.d2dConstants.valueTypes.STRING:
             self.__input_widget = QLineEdit()
 
+        elif self.__valueType == d2dcn.d2dConstants.valueTypes.BOOL_ARRAY:
+            self.__input_widget = QLineEdit()
+            self.__input_widget.setValidator(QRegularExpressionValidator(QRegularExpression("([0-1]" + fieldInput.INPUT_NUM_SEPATAROR + ")*")))
+
+        elif self.__valueType == d2dcn.d2dConstants.valueTypes.INT_ARRAY:
+            self.__input_widget = QLineEdit()
+            self.__input_widget.setValidator(QRegularExpressionValidator(QRegularExpression("(\d*" + fieldInput.INPUT_NUM_SEPATAROR + ")*")))
+
+        elif self.__valueType == d2dcn.d2dConstants.valueTypes.STRING_ARRAY:
+            self.__input_widget = QLineEdit()
+
+        elif self.__valueType == d2dcn.d2dConstants.valueTypes.FLOAT_ARRAY:
+            self.__input_widget = QLineEdit()
+            self.__input_widget.setValidator(QRegularExpressionValidator(QRegularExpression("((\d*|\d*\.\d*)" + fieldInput.INPUT_NUM_SEPATAROR + ")*")))
+
         else:
             self.__input_widget = QLineEdit("Unknown type")
 
@@ -567,20 +606,7 @@ class fieldInput(QWidget):
     def __enableDisableOptional(self):
         self.__enable = not self.__enable
 
-        if self.__valueType == d2dcn.d2dConstants.valueTypes.BOOL:
-            self.__input_widget.setEnabled(self.__enable)
-
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.FLOAT:
-            self.__input_widget.setEnabled(self.__enable)
-
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.INT:
-            self.__input_widget.setEnabled(self.__enable)
-
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.STRING:
-            self.__input_widget.setEnabled(self.__enable)
-
-        else:
-            self.__input_widget.setEnabled(self.__enable)
+        self.__input_widget.setEnabled(self.__enable)
 
 
     def getValue(self):
@@ -599,6 +625,34 @@ class fieldInput(QWidget):
 
         elif self.__valueType == d2dcn.d2dConstants.valueTypes.STRING:
             return self.__input_widget.text()
+
+        elif self.__valueType == d2dcn.d2dConstants.valueTypes.BOOL_ARRAY:
+            aux_list = self.__input_widget.text().split(fieldInput.INPUT_NUM_SEPATAROR)
+            re_list = []
+            for item in aux_list:
+                if item != "":
+                    re_list.append(bool(item))
+            return re_list
+
+        elif self.__valueType == d2dcn.d2dConstants.valueTypes.INT_ARRAY:
+            aux_list = self.__input_widget.text().split(fieldInput.INPUT_NUM_SEPATAROR)
+            re_list = []
+            for item in aux_list:
+                if item != "":
+                    re_list.append(int(item))
+            return re_list
+
+        elif self.__valueType == d2dcn.d2dConstants.valueTypes.STRING_ARRAY:
+            re_list = self.__input_widget.text().split(fieldInput.INPUT_STR_SEPATAROR)
+            return re_list
+
+        elif self.__valueType == d2dcn.d2dConstants.valueTypes.FLOAT_ARRAY:
+            aux_list = self.__input_widget.text().split(fieldInput.INPUT_NUM_SEPATAROR)
+            re_list = []
+            for item in aux_list:
+                if item != "":
+                    re_list.append(float(item))
+            return re_list
 
         else:
             return self.__input_widget.text()
@@ -625,12 +679,12 @@ class serviceCommand(QWidget):
 
 class commandExecution(QWidget):
 
+    INITIAL_WIDTH = 400
+
     def __init__(self, command_obj):
         super().__init__()
         self.setWindowModality(Qt.ApplicationModal)
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
-        #self.resize(self.sizeHint())
-
 
         self.__command_obj = command_obj
 
@@ -645,18 +699,30 @@ class commandExecution(QWidget):
     def runCommand(self):
 
         if len(self.__command_obj.params) > 0:
+
             self.show()
+
+            self.resize(commandExecution.INITIAL_WIDTH, self.height())
+
             command_args = commandArgs(self.__command_obj.params)
             self.__main_layout.addWidget(command_args)
             args = command_args.getArgs()
 
         else:
             args = {}
+
+        # Command call
         response = self.__command_obj.call(args)
+
         if not response.error and len(response) == 0:
             self.hide()
+
         else:
             self.show()
+
+            if len(args) == 0:
+                self.resize(commandExecution.INITIAL_WIDTH, self.height())
+
             command_response = commmandResponse(self.__command_obj.response, response)
             command_response.exit_buttom.clicked.connect(self.hide)
             self.__main_layout.addWidget(command_response)
