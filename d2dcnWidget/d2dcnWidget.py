@@ -24,7 +24,7 @@ import weakref
 import d2dcn
 
 
-version = "0.1.4"
+version = "0.1.5"
 
 class QHLine(QFrame):
     def __init__(self):
@@ -631,7 +631,7 @@ class fieldInput(QWidget):
             re_list = []
             for item in aux_list:
                 if item != "":
-                    re_list.append(bool(item))
+                    re_list.append(bool(item == "1"))
             return re_list
 
         elif self.__valueType == d2dcn.d2dConstants.valueTypes.INT_ARRAY:
