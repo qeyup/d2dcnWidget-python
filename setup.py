@@ -16,7 +16,7 @@ if __name__ == '__main__':
             ],
         },
         install_requires = [
-            "d2dcn",
+            "d2dcn>=0.5.1",
             "PyQt5"
         ],
         author = "Javier Moreno Garcia",

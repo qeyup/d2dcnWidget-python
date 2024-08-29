@@ -20,11 +20,12 @@ from PyQt5.QtCore import Qt, QEvent, QCoreApplication, QEventLoop, pyqtSignal, Q
 from PyQt5.QtGui import QFontMetrics, QRegularExpressionValidator
 
 import weakref
+import re
 
 import d2dcn
 
 
-version = "0.1.5"
+version = "0.2.0"
 
 class QHLine(QFrame):
     def __init__(self):
@@ -47,11 +48,20 @@ class d2dcnWidget(QWidget):
         super().__init__()
         self.__genMainLayout(device_hlayout, category_hlayout, object_hlayout)
 
-        self.__d2dcn_client = d2dcn.d2d()
-        self.__d2dcn_client.onCommandUpdate = lambda command, weak_widget=weakref.ref(self) : d2dcnWidget.__on_command_update(command, weak_widget)
-        self.__d2dcn_client.onInfoUpdate = lambda info, weak_widget=weakref.ref(self) : d2dcnWidget.__on_info_update(info, weak_widget)
-        self.__d2dcn_client.onCommandRemove = lambda command, weak_widget=weakref.ref(self) : d2dcnWidget.__on_command_remove(command, weak_widget)
-        self.__d2dcn_client.onInfoRemove = lambda info, weak_widget=weakref.ref(self) : d2dcnWidget.__on_info_remove(info, weak_widget)
+        self.__d2dcn_client = d2dcn.d2d(start=True)
+
+        self.__d2dcn_client.onCommandAdd = lambda mac, service, category, name, weak_widget=weakref.ref(self) : d2dcnWidget.__on_command_update(mac, service, category, name, weak_widget)
+        self.__d2dcn_client.onCommandUpdate = lambda mac, service, category, name, weak_widget=weakref.ref(self) : d2dcnWidget.__on_command_update(mac, service, category, name, weak_widget)
+        self.__d2dcn_client.onCommandRemove = lambda mac, service, category, name, weak_widget=weakref.ref(self) : d2dcnWidget.__on_command_remove(mac, service, category, name, weak_widget)
+
+        self.__d2dcn_client.onInfoAdd = lambda mac, service, category, name, weak_widget=weakref.ref(self) : d2dcnWidget.__on_info_update(mac, service, category, name, weak_widget)
+        self.__d2dcn_client.onInfoUpdate = lambda mac, service, category, name, weak_widget=weakref.ref(self) : d2dcnWidget.__on_info_update(mac, service, category, name, weak_widget)
+        self.__d2dcn_client.onInfoRemove = lambda mac, service, category, name, weak_widget=weakref.ref(self) : d2dcnWidget.__on_info_remove(mac, service, category, name, weak_widget)
+
+        self.__command_filters = []
+        self.__reader_filters = []
+
+        self.__d2dcn_client.start()
 
         self.resize(500,500)
 
@@ -80,36 +90,64 @@ class d2dcnWidget(QWidget):
         self.__main_layout.addWidget(self.__service_view)
 
 
-    def __on_info_update(info, d2dcn_widget_weak):
+    def __on_info_update(mac, service, category, name, d2dcn_widget_weak):
         d2dcn_widget = d2dcn_widget_weak()
         if d2dcn_widget:
-            QCoreApplication.postEvent(d2dcn_widget.__service_view, serviceView.addServiceInfoEvent(info))
+
+            uid = d2dcn.d2d.createInfoWriterUID(mac, service, category, name)
+            ok = len(d2dcn_widget.__reader_filters) == 0
+            for item in d2dcn_widget.__reader_filters:
+                if re.search(item, uid):
+                    ok = True
+                    break
+
+            if ok:
+                info_reader = d2dcn_widget.__d2dcn_client.getAvailableInfoReaders(name, service, category, mac, wait=5)
+                if len(info_reader) > 0:
+                    QCoreApplication.postEvent(d2dcn_widget.__service_view, serviceView.addServiceInfoEvent(info_reader[0]))
 
 
-    def __on_command_update(command, d2dcn_widget_weak):
+    def __on_command_update(mac, service, category, name, d2dcn_widget_weak):
         d2dcn_widget = d2dcn_widget_weak()
         if d2dcn_widget:
-            QCoreApplication.postEvent(d2dcn_widget.__service_view, serviceView.addServiceCommandEvent(command))
+
+            uid = d2dcn.d2d.createCommandUID(mac, service, category, name)
+            ok = len(d2dcn_widget.__command_filters) == 0
+            for item in d2dcn_widget.__command_filters:
+                if re.search(item, uid):
+                    ok = True
+                    break
+
+            if ok:
+                commands = d2dcn_widget.__d2dcn_client.getAvailableComands(name, service, category, mac, wait=5)
+                if len(commands) > 0:
+                    QCoreApplication.postEvent(d2dcn_widget.__service_view, serviceView.addServiceCommandEvent(commands[0]))
 
 
-    def __on_info_remove(info, d2dcn_widget_weak):
+    def __on_info_remove(mac, service, category, name, d2dcn_widget_weak):
         d2dcn_widget = d2dcn_widget_weak()
         if d2dcn_widget:
-            QCoreApplication.postEvent(d2dcn_widget.__service_view, serviceView.removeServiceInfoEvent(info))
+            QCoreApplication.postEvent(d2dcn_widget.__service_view, serviceView.removeServiceInfoEvent(mac, service, category, name))
 
 
-    def __on_command_remove(command, d2dcn_widget_weak):
+    def __on_command_remove(mac, service, category, name, d2dcn_widget_weak):
         d2dcn_widget = d2dcn_widget_weak()
         if d2dcn_widget:
-            QCoreApplication.postEvent(d2dcn_widget.__service_view, serviceView.removeServiceCommandEvent(command))
+            QCoreApplication.postEvent(d2dcn_widget.__service_view, serviceView.removeServiceCommandEvent(mac, service, category, name))
 
 
     def subscribeComands(self, mac:str="", service:str="", category:str="", command:str="") -> bool:
-        return self.__d2dcn_client.subscribeComands(mac, service, category, command)
+        uid = d2dcn.d2d.createCommandUID(mac, service, category, command)
+        if uid not in self.__command_filters:
+             self.__command_filters.append(uid)
+        return True
 
 
     def subscribeInfo(self, mac:str="", service:str="", category="", name:str="") -> bool:
-        return self.__d2dcn_client.subscribeInfo(mac, service, category, name)
+        uid = d2dcn.d2d.createInfoWriterUID(mac, service, category, name)
+        if uid not in self.__reader_filters:
+             self.__reader_filters.append(uid)
+        return True
 
 
 class lateralPanel(QWidget):
@@ -125,9 +163,12 @@ class serviceView(QWidget):
             self.command = command
 
     class removeServiceCommandEvent(QEvent):
-        def __init__(self, command):
+        def __init__(self, mac, service, category, name):
             super().__init__(QEvent.User)
-            self.command = command
+            self.mac = mac
+            self.service = service
+            self.category = category
+            self.name = name
 
     class addServiceInfoEvent(QEvent):
         def __init__(self, info):
@@ -135,9 +176,12 @@ class serviceView(QWidget):
             self.info = info
 
     class removeServiceInfoEvent(QEvent):
-        def __init__(self, info):
+        def __init__(self, mac, service, category, name):
             super().__init__(QEvent.User)
-            self.info = info
+            self.mac = mac
+            self.service = service
+            self.category = category
+            self.name = name
 
 
     def __init__(self, device_hlayout, category_hlayout, object_hlayout):
@@ -166,10 +210,10 @@ class serviceView(QWidget):
             self.addServiceInfo(event.info)
 
         elif isinstance(event, serviceView.removeServiceCommandEvent):
-            self.removeServiceCommand(event.command)
+            self.removeServiceCommand(event.mac, event.service, event.category, event.name)
 
         elif isinstance(event, serviceView.removeServiceInfoEvent):
-            self.removeServiceInfo(event.info)
+            self.removeServiceInfo(event.mac, event.service, event.category, event.name)
 
         else:
             return super().event(event)
@@ -181,11 +225,12 @@ class serviceView(QWidget):
         return device_mac + "/" + service_name
 
 
-    def addService(self, device_mac, service_name):
+    def addService(self, device_mac, service_name, ip):
         self.removeService(device_mac, service_name)
         widget = service(device_mac, service_name, self.__category_hlayout, self.__object_hlayout)
         self.__service_widget_map[self.generateServiceUID(device_mac, service_name)] = widget
         self.__main_layout.addWidget(widget)
+        widget.setToolTip(ip)
 
 
     def removeService(self, device_mac, service_name):
@@ -200,37 +245,46 @@ class serviceView(QWidget):
     def addServiceInfo(self, info_obj):
         uid = self.generateServiceUID(info_obj.mac, info_obj.service)
         if uid not in self.__service_widget_map:
-            self.addService(info_obj.mac, info_obj.service)
+            self.addService(info_obj.mac, info_obj.service, info_obj.ip)
 
         widget = self.__service_widget_map[uid]
         widget.addInfo(info_obj)
 
 
-    def removeServiceInfo(self, info_obj):
-        uid = self.generateServiceUID(info_obj.mac, info_obj.service)
+    def removeServiceInfo(self, mac, service, category, name):
+        uid = self.generateServiceUID(mac, service)
         if uid not in self.__service_widget_map:
             return
 
         widget = self.__service_widget_map[uid]
-        widget.removeInfo(info_obj)
+        widget.removeInfo(name)
+
+
+        if widget.objectCount() == 0:
+            del self.__service_widget_map[uid]
+            widget.deleteLater()
 
 
     def addServiceCommand(self, command_obj):
         uid = self.generateServiceUID(command_obj.mac, command_obj.service)
         if uid not in self.__service_widget_map:
-            self.addService(command_obj.mac, command_obj.service)
+            self.addService(command_obj.mac, command_obj.service, command_obj.ip)
 
         widget = self.__service_widget_map[uid]
         widget.addCommand(command_obj)
 
 
-    def removeServiceCommand(self, command_obj):
-        uid = self.generateServiceUID(command_obj.mac, command_obj.service)
+    def removeServiceCommand(self, mac, service, category, name):
+        uid = self.generateServiceUID(mac, service)
         if uid not in self.__service_widget_map:
             return
 
         widget = self.__service_widget_map[uid]
-        widget.removeCommand(command_obj)
+        widget.removeCommand(name)
+
+        if widget.objectCount() == 0:
+            del self.__service_widget_map[uid]
+            widget.deleteLater()
 
 
 class service(QTabWidget):
@@ -242,7 +296,10 @@ class service(QTabWidget):
         self.__object_hlayout = object_hlayout
         self.__category_hlayout = category_hlayout
         widget_main = QWidget()
-        self.addTab(widget_main, service_name + " (" + device_mac + ")")
+        self.__title = service_name + " (" + device_mac + ")"
+        self.__main_widget = widget_main
+        self.__hidden_widget = QWidget()
+        self.addTab(self.__main_widget, self.__title)
 
         self.__info_widget_map = {}
         self.__info_widget_category_map = {}
@@ -284,6 +341,16 @@ class service(QTabWidget):
 
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
+        self.tabBarDoubleClicked.connect(self.__showHideTab)
+
+    def __showHideTab(self):
+        if self.widget(0) == self.__main_widget:
+            self.removeTab(0)
+            self.addTab(self.__hidden_widget, self.__title)
+        else:
+            self.removeTab(0)
+            self.addTab(self.__main_widget, self.__title)
+
 
     def addInfo(self, info_obj):
 
@@ -314,6 +381,7 @@ class service(QTabWidget):
                 category_container_layout = self.__info_widget_category_map[info_obj.category]
 
             widget = fieldOutput(info_obj.name, info_obj.valueType, info_obj.value)
+            widget.setInfoReader(info_obj)
             self.__info_widget_map[info_obj.name] = widget
             category_container_layout.addWidget(widget)
 
@@ -325,9 +393,11 @@ class service(QTabWidget):
             self.__dif_line.show()
 
 
-    def removeInfo(self, info_obj):
-        if info_obj.name in self.__info_widget_map:
-            self.__info_widget_map.pop(info_obj.name).deleteLater()
+    def removeInfo(self, name):
+        if name in self.__info_widget_map:
+            widget = self.__info_widget_map.pop(name)
+            widget.setInfoReader(None)
+            widget.deleteLater()
 
 
     def addCommand(self, command_obj):
@@ -371,12 +441,22 @@ class service(QTabWidget):
             self.__dif_line.show()
 
 
-    def removeCommand(self, command_obj):
-        if command_obj.name in self.__command_widget_map:
-            self.__command_widget_map.pop(command_obj.name).deleteLater()
+    def removeCommand(self, name):
+        if name in self.__command_widget_map:
+            self.__command_widget_map.pop(name).deleteLater()
+
+
+    def objectCount(self):
+        return len(self.__command_widget_map) + len(self.__info_widget_map)
 
 
 class fieldOutput(QWidget):
+
+    class updateValueEvent(QEvent):
+        def __init__(self, value):
+            super().__init__(QEvent.User)
+            self.value = value
+
     def __init__(self, name, valueType, value, scroll_time=250):
         super().__init__()
 
@@ -386,6 +466,7 @@ class fieldOutput(QWidget):
         self.__value_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.__value_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
         self.__valueType = valueType
+        self.__reader_info = None
 
         self.setLayout(self.__main_layout)
         tag_label = QLabel(name + ": ")
@@ -432,34 +513,37 @@ class fieldOutput(QWidget):
 
     def update(self, value):
 
-        if self.__valueType == d2dcn.d2dConstants.valueTypes.BOOL:
+        if value == None:
+            self.__value_label.setText("")
+
+        elif self.__valueType == d2dcn.constants.valueTypes.BOOL:
             self.__value_label.setText(str(value))
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.FLOAT:
+        elif self.__valueType == d2dcn.constants.valueTypes.FLOAT:
             self.__value_label.setText(str(value))
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.INT:
+        elif self.__valueType == d2dcn.constants.valueTypes.INT:
             self.__value_label.setText(str(value))
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.STRING:
+        elif self.__valueType == d2dcn.constants.valueTypes.STRING:
             self.__value_label.setText(value)
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.BOOL_ARRAY:
+        elif self.__valueType == d2dcn.constants.valueTypes.BOOL_ARRAY:
             value_txt = []
             for item in value:
                 value_txt.append(str("1" if item else "0"))
             self.__value_label.setText(fieldInput.INPUT_NUM_SEPATAROR.join(value_txt))
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.INT_ARRAY:
+        elif self.__valueType == d2dcn.constants.valueTypes.INT_ARRAY:
             value_txt = []
             for item in value:
                 value_txt.append(str(item))
             self.__value_label.setText(fieldInput.INPUT_NUM_SEPATAROR.join(value_txt))
-    
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.STRING_ARRAY:
+
+        elif self.__valueType == d2dcn.constants.valueTypes.STRING_ARRAY:
             self.__value_label.setText(fieldInput.INPUT_STR_SEPATAROR.join(value))
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.FLOAT_ARRAY:
+        elif self.__valueType == d2dcn.constants.valueTypes.FLOAT_ARRAY:
             value_txt = []
             for item in value:
                 value_txt.append(str(item))
@@ -474,6 +558,29 @@ class fieldOutput(QWidget):
 
         else:
             self.__value_label.setMinimumWidth(100)
+
+
+    def event(self, event):
+        if isinstance(event, fieldOutput.updateValueEvent):
+            self.update(event.value)
+
+        else:
+            return super().event(event)
+
+        return True
+
+
+    def __update_callback(weak_ptr):
+        shared_ptr = weak_ptr()
+        if shared_ptr:
+            QCoreApplication.postEvent(shared_ptr, fieldOutput.updateValueEvent(shared_ptr.__reader_info.value))
+
+
+    def setInfoReader(self, reader_info):
+        self.__reader_info = reader_info
+        if self.__reader_info:
+            self.__update_from_reader = lambda weak_prt=weakref.ref(self) : fieldOutput.__update_callback(weak_prt)
+            reader_info.addOnUpdateCallback(self.__update_from_reader)
 
 
 class fieldInput(QWidget):
@@ -564,30 +671,30 @@ class fieldInput(QWidget):
         self.__main_layout.addWidget(tag_label)
 
 
-        if self.__valueType == d2dcn.d2dConstants.valueTypes.BOOL:
+        if self.__valueType == d2dcn.constants.valueTypes.BOOL:
             self.__input_widget = QCheckBox()
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.FLOAT:
+        elif self.__valueType == d2dcn.constants.valueTypes.FLOAT:
             self.__input_widget = fieldInput.CDoubleSpinBox()
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.INT:
+        elif self.__valueType == d2dcn.constants.valueTypes.INT:
             self.__input_widget = fieldInput.CSpinBox()
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.STRING:
+        elif self.__valueType == d2dcn.constants.valueTypes.STRING:
             self.__input_widget = QLineEdit()
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.BOOL_ARRAY:
+        elif self.__valueType == d2dcn.constants.valueTypes.BOOL_ARRAY:
             self.__input_widget = QLineEdit()
             self.__input_widget.setValidator(QRegularExpressionValidator(QRegularExpression("([0-1]" + fieldInput.INPUT_NUM_SEPATAROR + ")*")))
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.INT_ARRAY:
+        elif self.__valueType == d2dcn.constants.valueTypes.INT_ARRAY:
             self.__input_widget = QLineEdit()
             self.__input_widget.setValidator(QRegularExpressionValidator(QRegularExpression("(\d*" + fieldInput.INPUT_NUM_SEPATAROR + ")*")))
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.STRING_ARRAY:
+        elif self.__valueType == d2dcn.constants.valueTypes.STRING_ARRAY:
             self.__input_widget = QLineEdit()
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.FLOAT_ARRAY:
+        elif self.__valueType == d2dcn.constants.valueTypes.FLOAT_ARRAY:
             self.__input_widget = QLineEdit()
             self.__input_widget.setValidator(QRegularExpressionValidator(QRegularExpression("((\d*|\d*\.\d*)" + fieldInput.INPUT_NUM_SEPATAROR + ")*")))
 
@@ -614,19 +721,19 @@ class fieldInput(QWidget):
         if not self.__enable:
             return None
 
-        if self.__valueType == d2dcn.d2dConstants.valueTypes.BOOL:
+        if self.__valueType == d2dcn.constants.valueTypes.BOOL:
             return self.__input_widget.isChecked()
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.FLOAT:
+        elif self.__valueType == d2dcn.constants.valueTypes.FLOAT:
             return self.__input_widget.value()
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.INT:
+        elif self.__valueType == d2dcn.constants.valueTypes.INT:
             return self.__input_widget.value()
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.STRING:
+        elif self.__valueType == d2dcn.constants.valueTypes.STRING:
             return self.__input_widget.text()
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.BOOL_ARRAY:
+        elif self.__valueType == d2dcn.constants.valueTypes.BOOL_ARRAY:
             aux_list = self.__input_widget.text().split(fieldInput.INPUT_NUM_SEPATAROR)
             re_list = []
             for item in aux_list:
@@ -634,7 +741,7 @@ class fieldInput(QWidget):
                     re_list.append(bool(item == "1"))
             return re_list
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.INT_ARRAY:
+        elif self.__valueType == d2dcn.constants.valueTypes.INT_ARRAY:
             aux_list = self.__input_widget.text().split(fieldInput.INPUT_NUM_SEPATAROR)
             re_list = []
             for item in aux_list:
@@ -642,11 +749,11 @@ class fieldInput(QWidget):
                     re_list.append(int(item))
             return re_list
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.STRING_ARRAY:
+        elif self.__valueType == d2dcn.constants.valueTypes.STRING_ARRAY:
             re_list = self.__input_widget.text().split(fieldInput.INPUT_STR_SEPATAROR)
             return re_list
 
-        elif self.__valueType == d2dcn.d2dConstants.valueTypes.FLOAT_ARRAY:
+        elif self.__valueType == d2dcn.constants.valueTypes.FLOAT_ARRAY:
             aux_list = self.__input_widget.text().split(fieldInput.INPUT_NUM_SEPATAROR)
             re_list = []
             for item in aux_list:
@@ -738,7 +845,7 @@ class commandExecution(QWidget):
 
 class commandArgs(QWidget):
 
-    def __init__(self, args_map):
+    def __init__(self, args):
         super().__init__()
 
 
@@ -746,11 +853,11 @@ class commandArgs(QWidget):
         self.setLayout(self.__main_layout)
 
         self.__input_fields = {}
-        for arg in args_map:
-            valueType = args_map[arg][d2dcn.d2dConstants.infoField.TYPE]
-            optional = d2dcn.d2dConstants.infoField.OPTIONAL in args_map[arg] and args_map[arg][d2dcn.d2dConstants.infoField.OPTIONAL]
-            field_input = fieldInput(arg, valueType, optional)
-            self.__input_fields[arg] = field_input
+        for name in args.names:
+            valueType = args.getArgType(name)
+            optional = args.isArgOptional(name)
+            field_input = fieldInput(name, valueType, optional)
+            self.__input_fields[name] = field_input
             self.__main_layout.addWidget(field_input)
 
         expanding_widget = QWidget()
@@ -803,7 +910,7 @@ class commmandResponse(QWidget):
                         label = QLabel("Invalid field " + response)
 
                     else:
-                        item = fieldOutput(response, resonse_proto[response][d2dcn.d2dConstants.infoField.TYPE], response_map[response])
+                        item = fieldOutput(response, resonse_proto.getArgType(response), response_map[response])
 
                     self.__main_layout.addWidget(item)
 
